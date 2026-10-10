@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
-import { todoFilterSchema } from "@/domain/todo";
 import { todoService } from "@/server/todo";
 import { readJson, toErrorResponse } from "../_lib/http";
 
 export async function GET(req: Request) {
   try {
-    const raw = new URL(req.url).searchParams.get("filter") ?? "all";
-    const filter = todoFilterSchema.parse(raw);
-    return NextResponse.json(await todoService.list(filter));
+    const query = Object.fromEntries(new URL(req.url).searchParams);
+    return NextResponse.json(await todoService.list(query));
   } catch (e) {
     return toErrorResponse(e);
   }

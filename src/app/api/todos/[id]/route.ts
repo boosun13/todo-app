@@ -4,6 +4,15 @@ import { readJson, toErrorResponse } from "../../_lib/http";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+export async function GET(_req: Request, { params }: Ctx) {
+  try {
+    const { id } = await params;
+    return NextResponse.json(await todoService.get(id));
+  } catch (e) {
+    return toErrorResponse(e);
+  }
+}
+
 export async function PATCH(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
