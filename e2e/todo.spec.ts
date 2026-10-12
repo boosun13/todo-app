@@ -24,8 +24,11 @@ test("作成 → 完了 → 検索 → 編集 → 削除", async ({ page }) => {
   await expect(row).toContainText("期限切れ");
 
   // 完了にして、リロード後も保持される
+  // 保存(Server Action の応答)完了を待ってからリロードする
+  const saved = page.waitForResponse((r) => r.request().method() === "POST" && r.ok());
   await row.getByRole("checkbox").click();
   await expect(row.getByRole("checkbox")).toBeChecked();
+  await saved;
   await page.reload();
   await expect(page.getByRole("listitem").filter({ hasText: title }).getByRole("checkbox")).toBeChecked();
 
@@ -38,8 +41,11 @@ test("作成 → 完了 → 検索 → 編集 → 削除", async ({ page }) => {
   await page.getByRole("link", { name: title }).click();
   await expect(page).toHaveURL(/\/todos\/.+/);
   await page.getByLabel("タイトル").fill(`${title}-edited`);
+  const updated = page.waitForResponse((r) => r.request().method() === "POST" && r.ok());
   await page.getByRole("button", { name: "保存" }).click();
+  await updated;
   await expect(page.getByText("更新")).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存" })).toBeEnabled();
   await page.reload();
   await expect(page.getByLabel("タイトル")).toHaveValue(`${title}-edited`);
 

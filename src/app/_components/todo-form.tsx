@@ -58,14 +58,14 @@ export function TodoForm({ defaultValues = EMPTY, submitLabel, onSubmit, onSucce
     <form onSubmit={submit} className="space-y-4" noValidate>
       <div className="space-y-1.5">
         <Label htmlFor="title">タイトル</Label>
-        <Input id="title" autoFocus aria-invalid={!!errors.title} {...register("title")} />
-        <FieldError message={errors.title?.message} />
+        <Input id="title" autoFocus aria-invalid={!!errors.title} aria-describedby={errors.title ? "title-error" : undefined} {...register("title")} />
+        <FieldError id="title-error" message={errors.title?.message} />
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor="description">メモ</Label>
-        <Textarea id="description" rows={3} aria-invalid={!!errors.description} {...register("description")} />
-        <FieldError message={errors.description?.message} />
+        <Textarea id="description" rows={3} aria-invalid={!!errors.description} aria-describedby={errors.description ? "description-error" : undefined} {...register("description")} />
+        <FieldError id="description-error" message={errors.description?.message} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -96,8 +96,8 @@ export function TodoForm({ defaultValues = EMPTY, submitLabel, onSubmit, onSucce
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="dueDate">期限</Label>
-          <Input id="dueDate" type="date" aria-invalid={!!errors.dueDate} {...register("dueDate")} />
-          <FieldError message={errors.dueDate?.message} />
+          <Input id="dueDate" type="date" aria-invalid={!!errors.dueDate} aria-describedby={errors.dueDate ? "dueDate-error" : undefined} {...register("dueDate")} />
+          <FieldError id="dueDate-error" message={errors.dueDate?.message} />
         </div>
       </div>
 
@@ -111,10 +111,10 @@ export function TodoForm({ defaultValues = EMPTY, submitLabel, onSubmit, onSucce
   );
 }
 
-function FieldError({ message }: { message?: string }) {
+function FieldError({ id, message }: { id?: string; message?: string }) {
   if (!message) return null;
   return (
-    <p role="alert" className="text-sm text-destructive">
+    <p id={id} role="alert" className="text-sm text-destructive">
       {message}
     </p>
   );

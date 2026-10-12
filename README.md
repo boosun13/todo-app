@@ -21,6 +21,7 @@ pnpm dev
 | コマンド | 内容 |
 |---|---|
 | `pnpm test` | ユニットテスト(Vitest。DB 不要) |
+| `TEST_DATABASE_URL=... pnpm test` | 上記に加え Repository 契約テストを実 DB(専用・全削除される)でも実行 |
 | `pnpm e2e` | E2E(Playwright。要 `pnpm build` と DB) |
 | `pnpm verify` | lint + typecheck + test + build |
 
@@ -38,7 +39,10 @@ src/server/todo/index.ts          Composition root(ここだけで具象を注�
 
 詳しい設計と技術選定の理由は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照。
 
+## Codespaces など転送ホストで開発する場合
+`DEV_ALLOWED_HOSTS` に正確なホスト名(例: `my-codespace-3000.app.github.dev`、カンマ区切り)を設定します。Codespaces では `CODESPACE_NAME` から自動導出されます。開発サーバー時のみ有効です。
+
 ## デプロイ(Vercel など)
 1. Neon / Supabase 等の PostgreSQL を用意し、`DATABASE_URL` を環境変数に設定
 2. ビルドコマンド: `pnpm exec prisma migrate deploy && pnpm build`
-3. `next.config.ts` の `serverActions.allowedOrigins` から開発用のエントリを外す(本番ドメインがホストと一致していれば不要)
+3. `next.config.ts` の開発用許可ホスト(`allowedOrigins` / `allowedDevOrigins`)は開発サーバー時のみ有効で、本番ビルドでは追加されません(設定不要。本番ドメインがホストと一致していれば Server Actions は通ります)

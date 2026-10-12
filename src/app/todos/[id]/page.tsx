@@ -38,7 +38,7 @@ async function TodoDetail({ params }: Pick<PageProps<"/todos/[id]">, "params">) 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>TODO の編集</CardTitle>
+        <CardTitle as="h1">TODO の編集</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         <TodoForm

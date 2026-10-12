@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { NotFoundError } from "@/domain/errors";
 import { bucketByDay, type TodoStats } from "@/domain/stats";
 import { addUtcDays, startOfUtcDay } from "@/domain/date";
@@ -11,6 +12,10 @@ import type { TodoRepository } from "@/domain/todo-repository";
 
 const STATS_DAYS = 7;
 
+/** 境界の型を信用しない。undefined 等が Prisma の where:{} になるのを防ぐ */
+const idSchema = z.string().min(1);
+const parseId = (id: unknown): string => idSchema.parse(id);
+
 /**
  * ユースケース層。入力検証・ドメインルール(完了日時の管理など)・ドメインエラーの発行を担い、
  * 永続化の詳細は TodoRepository に隠蔽する。
@@ -23,7 +28,7 @@ export const createTodoService = (repo: TodoRepository, clock: () => Date = () =
   },
 
   async get(id: string): Promise<Todo> {
-    const todo = await repo.findById(id);
+    const todo = await repo.findById(parseId(id));
     if (!todo) throw new NotFoundError("Todo");
     return todo;
   },
@@ -33,17 +38,18 @@ export const createTodoService = (repo: TodoRepository, clock: () => Date = () =
   },
 
   async update(id: string, input: unknown): Promise<Todo> {
+    const validId = parseId(id);
     const patch = updateTodoSchema.parse(input);
     // 完了状態の変化に合わせて完了日時を保つ(統計の元データになる)
     const completedAt =
       patch.completed === undefined ? undefined : patch.completed ? clock() : null;
-    const todo = await repo.update(id, { ...patch, completedAt });
+    const todo = await repo.update(validId, { ...patch, completedAt });
     if (!todo) throw new NotFoundError("Todo");
     return todo;
   },
 
   async remove(id: string): Promise<void> {
-    if (!(await repo.delete(id))) throw new NotFoundError("Todo");
+    if (!(await repo.delete(parseId(id)))) throw new NotFoundError("Todo");
   },
 
   clearCompleted: (): Promise<number> => repo.deleteCompleted(),
@@ -51,10 +57,7 @@ export const createTodoService = (repo: TodoRepository, clock: () => Date = () =
   async stats(): Promise<TodoStats> {
     const now = clock();
     const since = addUtcDays(startOfUtcDay(now), -(STATS_DAYS - 1));
-    const [counts, completedAts] = await Promise.all([
-      repo.counts(now),
-      repo.completedAtSince(since),
-    ]);
+    const { counts, completedAts } = await repo.statsSnapshot(now, since);
     return {
       ...counts,
       completionRate: counts.total === 0 ? 0 : counts.completed / counts.total,

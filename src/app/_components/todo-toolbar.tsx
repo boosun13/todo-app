@@ -3,7 +3,7 @@
 import { SearchIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -36,13 +36,33 @@ const SEARCH_DEBOUNCE_MS = 300;
 export function TodoToolbar({ query }: { query: TodoQuery }) {
   const router = useRouter();
   const [q, setQ] = useState(query.q);
+  const [syncedQ, setSyncedQ] = useState(query.q);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const queryRef = useRef(query);
 
-  // 検索語はデバウンスして URL に反映する(URL が唯一の状態)
   useEffect(() => {
-    if (q.trim() === query.q) return;
-    const t = setTimeout(() => router.replace(todoQueryHref(query, { q: q.trim() })), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [q, query, router]);
+    queryRef.current = query;
+  });
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  // URL が唯一の状態: 外部(ヘッダーのリンク等)で URL が変わったら入力値を同期する
+  if (query.q !== syncedQ) {
+    setSyncedQ(query.q);
+    setQ(query.q);
+  }
+  useEffect(() => {
+    clearTimeout(timer.current); // 外部の URL 変更時は保留中の送信を取り消す
+  }, [query.q]);
+
+  // 検索語はユーザー入力起点でデバウンスして URL に反映する
+  function onSearchChange(value: string) {
+    setQ(value);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const next = value.trim();
+      if (next !== queryRef.current.q) router.replace(todoQueryHref(queryRef.current, { q: next }));
+    }, SEARCH_DEBOUNCE_MS);
+  }
 
   return (
     <div className="space-y-3">
@@ -51,7 +71,8 @@ export function TodoToolbar({ query }: { query: TodoQuery }) {
         <Input
           type="search"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => onSearchChange(e.target.value)}
+          maxLength={100}
           placeholder="タイトル・メモを検索"
           aria-label="検索"
           className="pl-8"

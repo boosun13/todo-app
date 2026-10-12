@@ -9,12 +9,18 @@ export interface TodoRepository {
   findMany(query: TodoQuery): Promise<Todo[]>;
   findById(id: string): Promise<Todo | null>;
   create(input: CreateTodoInput): Promise<Todo>;
-  /** 対象が存在しない場合は null */
+  /**
+   * 対象が存在しない場合は null。
+   * patch.completed が現在値と異なる(遷移する)ときだけ patch.completedAt を適用し、
+   * 同じ状態の再送では completedAt を変えない。
+   */
   update(id: string, patch: TodoPatch): Promise<Todo | null>;
   /** 削除できたら true、存在しなければ false */
   delete(id: string): Promise<boolean>;
   deleteCompleted(): Promise<number>;
-  /** now より前の期限で未完了のものを overdue として数える */
-  counts(now: Date): Promise<TodoCounts>;
-  completedAtSince(since: Date): Promise<Date[]>;
+  /**
+   * 統計の元データを同一時点のスナップショットで返す。
+   * now より前の期限で未完了のものを overdue として数え、since 以降の完了日時を返す。
+   */
+  statsSnapshot(now: Date, since: Date): Promise<{ counts: TodoCounts; completedAts: Date[] }>;
 }

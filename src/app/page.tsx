@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isOverdue, todoQuerySchema } from "@/domain/todo";
+import { isOverdue, todoQuerySchema, type TodoQuery } from "@/domain/todo";
 import { todoService } from "@/server/todo";
 import { ClearCompletedButton } from "./_components/clear-completed-button";
 import { CreateTodoDialog } from "./_components/create-todo-dialog";
@@ -28,8 +28,14 @@ async function TodoSection({ searchParams }: Pick<PageProps<"/">, "searchParams"
     Object.entries(await searchParams).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v]),
   );
   // 不正なクエリは既定値にフォールバック(画面なので 400 にはしない)
-  const parsed = todoQuerySchema.safeParse(raw);
-  const query = parsed.success ? parsed.data : todoQuerySchema.parse({});
+  // 項目単位で検証し、不正な項目だけ既定値に戻す(他の有効な条件は維持する)
+  const { shape } = todoQuerySchema;
+  const query: TodoQuery = {
+    filter: shape.filter.safeParse(raw.filter).data ?? "all",
+    sort: shape.sort.safeParse(raw.sort).data ?? "created",
+    priority: shape.priority.safeParse(raw.priority).data,
+    q: shape.q.safeParse(raw.q).data ?? "",
+  };
 
   const [todos, stats] = await Promise.all([todoService.list(query), todoService.stats()]);
   const now = new Date();

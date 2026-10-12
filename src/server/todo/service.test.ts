@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 import { NotFoundError } from "@/domain/errors";
+import type { TodoRepository } from "@/domain/todo-repository";
 import { createInMemoryTodoRepository } from "./in-memory-repository";
 import { createTodoService, type TodoService } from "./service";
 
@@ -8,8 +9,10 @@ const NOW = new Date("2026-10-10T12:00:00Z");
 
 describe("todoService", () => {
   let service: TodoService;
+  let repo: TodoRepository;
   beforeEach(() => {
-    service = createTodoService(createInMemoryTodoRepository(), () => NOW);
+    repo = createInMemoryTodoRepository();
+    service = createTodoService(repo, () => NOW);
   });
 
   describe("add", () => {
@@ -60,6 +63,17 @@ describe("todoService", () => {
       });
     });
 
+    it("完了済みに completed:true を再送しても completedAt は上書きされない", async () => {
+      const { id } = await service.add({ title: "a" });
+      await service.update(id, { completed: true });
+      const later = createTodoService(repo, () => new Date("2026-10-11T00:00:00Z"));
+      expect(await later.update(id, { completed: true })).toMatchObject({ completed: true, completedAt: NOW });
+      expect(await later.update(id, { completed: true, title: "b" })).toMatchObject({
+        title: "b",
+        completedAt: NOW,
+      });
+    });
+
     it("完了状態に触れない更新では completedAt を変えない", async () => {
       const { id } = await service.add({ title: "a" });
       await service.update(id, { completed: true });
@@ -86,6 +100,18 @@ describe("todoService", () => {
       await expect(service.get("nope")).rejects.toBeInstanceOf(NotFoundError);
       await expect(service.remove("nope")).rejects.toBeInstanceOf(NotFoundError);
     });
+
+    it.each([[undefined], [null], [""], [123], [{}]])(
+      "不正な id(%j)は ZodError で、他の TODO は削除されない",
+      async (bad) => {
+        await service.add({ title: "a" });
+        await service.add({ title: "b" });
+        await expect(service.remove(bad as never)).rejects.toBeInstanceOf(ZodError);
+        await expect(service.update(bad as never, { title: "x" })).rejects.toBeInstanceOf(ZodError);
+        await expect(service.get(bad as never)).rejects.toBeInstanceOf(ZodError);
+        expect(await service.list()).toHaveLength(2);
+      },
+    );
 
     it("削除後は取得できない", async () => {
       const { id } = await service.add({ title: "a" });

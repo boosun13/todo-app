@@ -1,25 +1,45 @@
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  /* config options here */
-  experimental: {
-    serverActions: {
-      // Codespaces のポート転送では x-forwarded-host が *.app.github.dev になる一方、
-      // ブラウザの Origin は localhost:3000 や *.app.github.dev になり得る。
-      // CSRF チェックで弾かれないよう両方を許可する
-      allowedOrigins: ["localhost:3000", "*.app.github.dev"],
-    },
-  },
-  cacheComponents: true,
-  partialPrefetching: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
+/**
+ * 開発時のみ許可する正確なホスト名(カンマ区切り)。
+ * 例: DEV_ALLOWED_HOSTS=my-codespace-3000.app.github.dev
+ * Codespaces では CODESPACE_NAME と転送ドメインから自動導出する(ワイルドカードは使わない)。
+ */
+const devHosts = (): string[] => {
+  const explicit = (process.env.DEV_ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+  const { CODESPACE_NAME, GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN } = process.env;
+  const codespace =
+    CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN
+      ? [`${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`]
+      : [];
+  return [...new Set([...explicit, ...codespace])];
 };
 
-export default nextConfig;
+const config = (phase: string): NextConfig => {
+  const isDev = phase === PHASE_DEVELOPMENT_SERVER;
+  const hosts = isDev ? devHosts() : [];
+  return {
+    // Server Actions の CSRF チェック(Origin と x-forwarded-host の照合)用。本番では何も追加しない
+    experimental: {
+      serverActions: { allowedOrigins: isDev ? ["localhost:3000", ...hosts] : [] },
+    },
+    // dev サーバーへのクロスオリジン要求の許可(ホスト名のみ)
+    ...(isDev && hosts.length > 0 && { allowedDevOrigins: hosts }),
+    cacheComponents: true,
+    partialPrefetching: true,
+    turbopack: {
+      rules: {
+        "*.css": {
+          loaders: ["@tailwindcss/turbopack"],
+          as: "*.css",
+        },
+      },
+    },
+  };
+};
+
+export default config;

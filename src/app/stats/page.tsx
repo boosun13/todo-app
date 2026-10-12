@@ -36,7 +36,7 @@ async function StatsView() {
 
       <Card>
         <CardHeader>
-          <CardTitle>達成率</CardTitle>
+          <CardTitle as="h2">達成率</CardTitle>
           <CardDescription>{Math.round(stats.completionRate * 100)}%</CardDescription>
         </CardHeader>
         <CardContent>
@@ -79,7 +79,7 @@ function PriorityCard({ stats }: { stats: TodoStats }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>未完了の優先度内訳</CardTitle>
+        <CardTitle as="h2">未完了の優先度内訳</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {[...PRIORITIES].reverse().map((p) => (
@@ -101,7 +101,7 @@ function DailyCard({ stats }: { stats: TodoStats }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>直近 7 日間の完了数</CardTitle>
+        <CardTitle as="h2">直近 7 日間の完了数</CardTitle>
       </CardHeader>
       <CardContent>
         <ul className="flex h-32 items-end gap-2">
