@@ -7,6 +7,7 @@ Next.js 16 (App Router) + Prisma + PostgreSQL + Zod + shadcn/ui + Tailwind CSS 4
 - 優先度(低/中/高)、期限(期限切れ表示)、メモ
 - 検索・状態/優先度での絞り込み・並び替え(すべて URL クエリが状態)
 - 統計ページ(件数・達成率・優先度内訳・直近7日の完了数)
+- 完了済みの一括アーカイブ（完了実績を保持。単件削除は物理削除）
 - ダークモード、トースト通知、REST API(`/api/todos`)
 
 ## 起動
@@ -24,6 +25,22 @@ pnpm dev
 | `TEST_DATABASE_URL=... pnpm test` | 上記に加え Repository 契約テストを実 DB(専用・全削除される)でも実行 |
 | `pnpm e2e` | E2E(Playwright。要 `pnpm build` と DB) |
 | `pnpm verify` | lint + typecheck + test + build |
+
+## 日付とアーカイブ
+`APP_TIME_ZONE` は IANA タイムゾーン名（例: `Asia/Tokyo`、`UTC`、`America/Los_Angeles`）を指定し、未設定時は `Asia/Tokyo` です。不正な名前は server 設定の読み込み時にエラーになります。この設定で「今日」の期限切れ判定、日別完了数、詳細画面の日時表示を統一します。期限そのものは従来どおり `YYYY-MM-DD` / DB の `DATE`（UTC 0 時の Date）です。
+
+一括クリアは完了済みを `archivedAt` でアーカイブします。アーカイブ済みは一覧・詳細・更新・単件削除から除外し、通常の件数・優先度内訳にも含めません。日別完了数と達成率には完了実績が残ります。達成率は `(未アーカイブの完了数 + アーカイブ済み完了数) / (未アーカイブの合計 + アーカイブ済み完了数)` です。単件削除では実績も削除します。
+
+実 DB の契約テストは専用 DB で実行します（テストごとに TODO を全削除します）。
+
+```bash
+pnpm db:up
+# todo_test がまだ存在しない場合のみ実行
+docker compose exec -T db psql -U todo -c 'create database todo_test'
+DATABASE_URL='postgresql://todo:todo@localhost:5432/todo_test?schema=public' pnpm prisma migrate deploy
+TEST_DATABASE_URL='postgresql://todo:todo@localhost:5432/todo_test?schema=public' pnpm test
+docker compose down # ボリュームは保持
+```
 
 ## 構成と依存方向
 ```

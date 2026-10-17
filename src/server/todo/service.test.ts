@@ -12,7 +12,31 @@ describe("todoService", () => {
   let repo: TodoRepository;
   beforeEach(() => {
     repo = createInMemoryTodoRepository();
-    service = createTodoService(repo, () => NOW);
+    service = createTodoService(repo, { clock: () => NOW });
+  });
+
+  it.each([
+    ["Asia/Tokyo", "2026-10-11", 1],
+    ["UTC", "2026-10-10", 0],
+    ["America/Los_Angeles", "2026-10-10", 0],
+  ])("today と統計は %s の暦日で一致する", async (timeZone, day, overdue) => {
+    const zoned = createTodoService(repo, { clock: () => new Date("2026-10-10T23:30:00Z"), timeZone });
+    await zoned.add({ title: "期限", dueDate: "2026-10-10" });
+    const done = await zoned.add({ title: "完了" });
+    await zoned.update(done.id, { completed: true });
+    expect(zoned.today()).toEqual(new Date(day));
+    const stats = await zoned.stats();
+    expect(stats.overdue).toBe(overdue);
+    expect(stats.completedPerDay.at(-1)).toEqual({ date: day, count: 1 });
+  });
+
+  it("JST の表示初日 0 時の完了を取得し、前日の完了を範囲外にする", async () => {
+    for (const instant of ["2026-10-03T14:59:59Z", "2026-10-03T15:00:00Z"]) {
+      const at = createTodoService(repo, { clock: () => new Date(instant), timeZone: "Asia/Tokyo" });
+      const todo = await at.add({ title: instant });
+      await at.update(todo.id, { completed: true });
+    }
+    expect((await service.stats()).completedPerDay[0]).toEqual({ date: "2026-10-04", count: 1 });
   });
 
   describe("add", () => {
@@ -66,7 +90,7 @@ describe("todoService", () => {
     it("完了済みに completed:true を再送しても completedAt は上書きされない", async () => {
       const { id } = await service.add({ title: "a" });
       await service.update(id, { completed: true });
-      const later = createTodoService(repo, () => new Date("2026-10-11T00:00:00Z"));
+      const later = createTodoService(repo, { clock: () => new Date("2026-10-11T00:00:00Z") });
       expect(await later.update(id, { completed: true })).toMatchObject({ completed: true, completedAt: NOW });
       expect(await later.update(id, { completed: true, title: "b" })).toMatchObject({
         title: "b",
@@ -189,6 +213,26 @@ describe("todoService", () => {
       });
       expect(stats.completedPerDay).toHaveLength(7);
       expect(stats.completedPerDay.at(-1)).toEqual({ date: "2026-10-10", count: 1 });
+    });
+
+    it("アーカイブ後も日別完了数と累計達成率を保持する", async () => {
+      const done = await service.add({ title: "done" });
+      await service.add({ title: "active" });
+      await service.update(done.id, { completed: true });
+      const before = await service.stats();
+      expect(await service.clearCompleted()).toBe(1);
+      const after = await service.stats();
+      expect(after).toMatchObject({ total: 1, active: 1, completed: 0, archived: 1, completionRate: 0.5 });
+      expect(after.completedPerDay).toEqual(before.completedPerDay);
+      expect(await service.clearCompleted()).toBe(0);
+      await expect(service.get(done.id)).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it("全件アーカイブ済みでも達成率は 100%", async () => {
+      const done = await service.add({ title: "done" });
+      await service.update(done.id, { completed: true });
+      await service.clearCompleted();
+      expect(await service.stats()).toMatchObject({ total: 0, archived: 1, completionRate: 1 });
     });
 
     it("TODO が 0 件でも達成率は 0", async () => {

@@ -17,10 +17,12 @@ export interface TodoRepository {
   update(id: string, patch: TodoPatch): Promise<Todo | null>;
   /** 削除できたら true、存在しなければ false */
   delete(id: string): Promise<boolean>;
-  deleteCompleted(): Promise<number>;
+  /** 完了済みかつ未アーカイブの行をアーカイブし、件数を返す */
+  archiveCompleted(now: Date): Promise<number>;
   /**
    * 統計の元データを同一時点のスナップショットで返す。
-   * now より前の期限で未完了のものを overdue として数え、since 以降の完了日時を返す。
+   * today (UTC 0 時で表す暦日) より前の期限で未完了のものを overdue として数える。
+   * counts は未アーカイブが対象(archived は例外)。完了日時はアーカイブ済みも含め since (瞬間) 以降。
    */
-  statsSnapshot(now: Date, since: Date): Promise<{ counts: TodoCounts; completedAts: Date[] }>;
+  statsSnapshot(today: Date, since: Date): Promise<{ counts: TodoCounts; completedAts: Date[] }>;
 }

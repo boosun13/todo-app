@@ -22,6 +22,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://todo:todo@localhost:5432/todo?schema=public
+      # Prisma 契約テスト用(全削除するため本体とは別の DB)
+      TEST_DATABASE_URL: postgresql://todo:todo@localhost:5432/todo_test?schema=public
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -32,8 +34,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
       - run: pnpm db:deploy
+      - name: Prepare test database
+        run: |
+          PGPASSWORD=todo psql -h localhost -U todo -d todo -c 'CREATE DATABASE todo_test'
+          DATABASE_URL="$TEST_DATABASE_URL" pnpm db:deploy
+      - name: Test (スキップが 1 件でもあれば失敗させ、契約テストの素通りを防ぐ)
+        run: |
+          set -o pipefail
+          pnpm test 2>&1 | tee test.log
+          ! grep -E "Tests .*skipped" test.log
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e

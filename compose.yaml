@@ -5,8 +5,9 @@ services:
       POSTGRES_USER: todo
       POSTGRES_PASSWORD: todo
       POSTGRES_DB: todo
+    # 既知の資格情報なので、LAN 等から到達できないようループバックにだけ公開する
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

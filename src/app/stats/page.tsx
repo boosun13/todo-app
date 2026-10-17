@@ -37,7 +37,7 @@ async function StatsView() {
       <Card>
         <CardHeader>
           <CardTitle as="h2">達成率</CardTitle>
-          <CardDescription>{Math.round(stats.completionRate * 100)}%</CardDescription>
+          <CardDescription>{Math.round(stats.completionRate * 100)}%（アーカイブ済みを含む）</CardDescription>
         </CardHeader>
         <CardContent>
           <div

@@ -21,9 +21,11 @@ model Todo {
   priority    Priority  @default(MEDIUM)
   dueDate     DateTime? @db.Date
   completedAt DateTime?
+  archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  @@index([completed, createdAt])
+  @@index([archivedAt, completed, createdAt])
+  @@index([completedAt])
   @@index([dueDate])
 }

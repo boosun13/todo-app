@@ -1,5 +1,4 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { startOfUtcDay } from "@/domain/date";
 import { PRIORITIES, type Priority, type TodoQuery } from "@/domain/todo";
 import type { TodoRepository } from "@/domain/todo-repository";
 
@@ -7,6 +6,7 @@ import type { TodoRepository } from "@/domain/todo-repository";
 export const escapeLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
 
 const buildWhere = ({ filter, priority, q }: TodoQuery): Prisma.TodoWhereInput => ({
+  archivedAt: null,
   ...(filter !== "all" && { completed: filter === "completed" }),
   ...(priority && { priority }),
   ...(q && {
@@ -36,7 +36,7 @@ export const createPrismaTodoRepository = (db: PrismaClient): TodoRepository => 
   findMany: (query) =>
     db.todo.findMany({ where: buildWhere(query), orderBy: buildOrderBy(query.sort) }),
 
-  findById: (id) => db.todo.findUnique({ where: { id } }),
+  findById: (id) => db.todo.findUnique({ where: { id, archivedAt: null } }),
 
   create: (input) => db.todo.create({ data: input }),
 
@@ -46,16 +46,16 @@ export const createPrismaTodoRepository = (db: PrismaClient): TodoRepository => 
       if (completed !== undefined) {
         // 未完了→完了(または逆)の遷移時だけ completedAt を設定する条件付き更新(原子的)
         const { count } = await db.todo.updateMany({
-          where: { id, completed: !completed },
+          where: { id, archivedAt: null, completed: !completed },
           data: { ...rest, completed, completedAt },
         });
-        if (count > 0) return await db.todo.findUnique({ where: { id } });
+        if (count > 0) return await db.todo.findUnique({ where: { id, archivedAt: null } });
       }
       // 遷移しない(同状態の再送・完了に無関係な更新)場合は completedAt に触れない
       if (Object.values(rest).every((v) => v === undefined)) {
-        return await db.todo.findUnique({ where: { id } });
+        return await db.todo.findUnique({ where: { id, archivedAt: null } });
       }
-      return await db.todo.update({ where: { id }, data: rest });
+      return await db.todo.update({ where: { id, archivedAt: null }, data: rest });
     } catch (e) {
       if (isRecordNotFound(e)) return null;
       throw e;
@@ -64,7 +64,7 @@ export const createPrismaTodoRepository = (db: PrismaClient): TodoRepository => 
 
   async delete(id) {
     try {
-      await db.todo.delete({ where: { id } });
+      await db.todo.delete({ where: { id, archivedAt: null } });
       return true;
     } catch (e) {
       if (isRecordNotFound(e)) return false;
@@ -72,19 +72,23 @@ export const createPrismaTodoRepository = (db: PrismaClient): TodoRepository => 
     }
   },
 
-  async deleteCompleted() {
-    const { count } = await db.todo.deleteMany({ where: { completed: true } });
+  async archiveCompleted(now) {
+    const { count } = await db.todo.updateMany({
+      where: { completed: true, archivedAt: null },
+      data: { archivedAt: now },
+    });
     return count;
   },
 
-  async statsSnapshot(now, since) {
+  async statsSnapshot(today, since) {
     // 同一スナップショットで読むため Repeatable Read のトランザクションにまとめる
-    const [total, completed, overdue, grouped, rows] = await db.$transaction(
+    const [total, completed, archived, overdue, grouped, rows] = await db.$transaction(
       async (tx) => [
-        await tx.todo.count(),
-        await tx.todo.count({ where: { completed: true } }),
-        await tx.todo.count({ where: { completed: false, dueDate: { lt: startOfUtcDay(now) } } }),
-        await tx.todo.groupBy({ by: ["priority"], where: { completed: false }, _count: { _all: true } }),
+        await tx.todo.count({ where: { archivedAt: null } }),
+        await tx.todo.count({ where: { completed: true, archivedAt: null } }),
+        await tx.todo.count({ where: { completed: true, archivedAt: { not: null } } }),
+        await tx.todo.count({ where: { archivedAt: null, completed: false, dueDate: { lt: today } } }),
+        await tx.todo.groupBy({ by: ["priority"], where: { completed: false, archivedAt: null }, _count: { _all: true } }),
         await tx.todo.findMany({ where: { completedAt: { gte: since } }, select: { completedAt: true } }),
       ] as const,
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
@@ -92,7 +96,7 @@ export const createPrismaTodoRepository = (db: PrismaClient): TodoRepository => 
     const activeByPriority = Object.fromEntries(PRIORITIES.map((p) => [p, 0])) as Record<Priority, number>;
     for (const g of grouped) activeByPriority[g.priority] = g._count._all;
     return {
-      counts: { total, completed, active: total - completed, overdue, activeByPriority },
+      counts: { total, completed, archived, active: total - completed, overdue, activeByPriority },
       completedAts: rows.flatMap((r) => (r.completedAt ? [r.completedAt] : [])),
     };
   },

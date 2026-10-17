@@ -98,3 +98,13 @@ server/prisma-repository → domain
 - 機能が 1 つなのでレイヤー単位で分けている。機能が増えたら `features/<機能>/{domain,server,components}` の機能単位へ組み替える。
 - `server/` は将来の機能追加を見込んだ名前だが、現状は `todo/` のみ。
 - 存在しない TODO(`/todos/<不正なid>`)は Not Found 画面を表示するが、ストリーミング描画の仕様で HTTP ステータスは 200。
+
+## 3. 暦日とアーカイブの境界
+- `server/config.ts` で `APP_TIME_ZONE`（既定 `Asia/Tokyo`）を読み取り、IANA 名を検証する。Composition root が service の `options.timeZone` として渡す。domain は環境変数を読まない。
+- 期限は DB の `DATE` / UTC 0 時の Date のまま。瞬間から暦日への変換は `calendarDayIn(instant, timeZone)`、日付キーへの変換は `dateKeyIn(instant, timeZone)` が `Intl.DateTimeFormat` で行う。
+- service の `today()` は clock と timeZone から暦日を返す。画面では `isOverdue(todo, todoService.today())` として使う。Repository の `statsSnapshot(today, since)` も同じ暦日の境界で `dueDate < today` を数える。
+- 統計は 7 日分の暦日キーを作り、完了した瞬間をアプリ TZ の日付キーへ変換して振り分ける。DB の取得下限は `today - 7日` の瞬間とし、正の UTC オフセットでも初日の現地 0 時を含む余裕を持たせ、範囲外は domain で除外する。
+- 一括クリアは `archiveCompleted(clock())` に委譲する。`completed = true AND archivedAt IS NULL` の行だけを更新し、二重アーカイブしない。単件削除は物理削除のまま。
+- Repository の一覧・詳細・更新・削除はすべて `archivedAt IS NULL` を条件にする。Prisma の更新・削除は条件付きで実行し、`P2025` を null / false に変換する。
+- 統計は RepeatableRead の同一トランザクションで取得する。通常の件数は未アーカイブだけを対象にし、`counts.archived` はアーカイブ済み完了数を返す。日別完了数はアーカイブ済みも含め、達成率は `(completed + archived) / (total + archived)`（分母 0 は 0）。
+- `archivedAt, completed, createdAt` の複合インデックスは未アーカイブの状態別取得に、`completedAt` のインデックスは期間内の完了実績取得に使う。

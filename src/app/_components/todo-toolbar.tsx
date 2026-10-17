@@ -36,23 +36,33 @@ const SEARCH_DEBOUNCE_MS = 300;
 export function TodoToolbar({ query }: { query: TodoQuery }) {
   const router = useRouter();
   const [q, setQ] = useState(query.q);
-  const [syncedQ, setSyncedQ] = useState(query.q);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const queryRef = useRef(query);
+  // 自分が router.replace で送ったが、まだ URL に反映されていない検索語(送信順)
+  const inflight = useRef<string[]>([]);
 
   useEffect(() => {
     queryRef.current = query;
   });
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  // URL が唯一の状態: 外部(ヘッダーのリンク等)で URL が変わったら入力値を同期する
-  if (query.q !== syncedQ) {
-    setSyncedQ(query.q);
-    setQ(query.q);
-  }
+  // URL が唯一の状態。ただし自分の送信の応答(古い応答を含む)で入力値を巻き戻さない:
+  // - query.q が送信済みの値なら、その応答なので入力値の上書きも保留中タイマーの取消もしない
+  // - それ以外(ヘッダーのリンク等の外部変更、戻る/進む)は入力値を同期し、保留中の送信を取り消す
   useEffect(() => {
-    clearTimeout(timer.current); // 外部の URL 変更時は保留中の送信を取り消す
+    const idx = inflight.current.indexOf(query.q);
+    if (idx !== -1) {
+      inflight.current = inflight.current.slice(idx + 1); // 追い越された古い送信も破棄する
+      return;
+    }
+    inflight.current = [];
+    clearTimeout(timer.current);
+    setQ(query.q);
   }, [query.q]);
+  // 検索語以外の条件が変わる遷移(フィルタのリンク等)は送信中の検索を中断しうるので、記録を捨てる
+  useEffect(() => {
+    inflight.current = [];
+  }, [query.filter, query.sort, query.priority]);
 
   // 検索語はユーザー入力起点でデバウンスして URL に反映する
   function onSearchChange(value: string) {
@@ -60,7 +70,10 @@ export function TodoToolbar({ query }: { query: TodoQuery }) {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const next = value.trim();
-      if (next !== queryRef.current.q) router.replace(todoQueryHref(queryRef.current, { q: next }));
+      // 送信中のものがあれば(中断されて URL に反映されない可能性もあるので)常に送る。同じ URL の再送は無害
+      if (inflight.current.length === 0 && next === queryRef.current.q) return;
+      inflight.current.push(next);
+      router.replace(todoQueryHref(queryRef.current, { q: next }));
     }, SEARCH_DEBOUNCE_MS);
   }
 

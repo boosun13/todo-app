@@ -67,3 +67,31 @@ test("存在しない TODO は Not Found 画面", async ({ page }) => {
   await page.goto("/todos/does-not-exist");
   await expect(page.getByRole("heading", { name: "ページが見つかりません" })).toBeVisible();
 });
+
+test("完了済みの一括片付けは確認ダイアログを経る", async ({ page }) => {
+  const done = `E2E-done-${Date.now()}`;
+  await page.goto("/");
+  await page.getByRole("button", { name: "新規作成" }).click();
+  await page.getByLabel("タイトル").fill(done);
+  await page.getByRole("button", { name: "追加", exact: true }).click();
+  const row = page.getByRole("listitem").filter({ hasText: done });
+  await expect(row).toBeVisible();
+  const saved = page.waitForResponse((r) => r.request().method() === "POST" && r.ok());
+  await row.getByRole("checkbox").click();
+  await expect(row.getByRole("checkbox")).toBeChecked();
+  await saved;
+
+  // キャンセルでは何も消えない
+  await page.getByRole("button", { name: "完了済みを片付ける" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("統計の完了実績には残ります");
+  await dialog.getByRole("button", { name: "キャンセル" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(row).toBeVisible();
+
+  // 確定で完了済みが一覧から消え、フォーカスは body に落ちない
+  await page.getByRole("button", { name: "完了済みを片付ける" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "片付ける", exact: true }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: done })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "新規作成" })).toBeFocused();
+});

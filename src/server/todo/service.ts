@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { NotFoundError } from "@/domain/errors";
 import { bucketByDay, type TodoStats } from "@/domain/stats";
-import { addUtcDays, startOfUtcDay } from "@/domain/date";
+import { addUtcDays, calendarDayIn } from "@/domain/date";
 import {
   createTodoSchema,
   updateTodoSchema,
@@ -22,7 +22,12 @@ const parseId = (id: unknown): string => idSchema.parse(id);
  * 入力は unknown で受け、境界(Action / Route Handler)の型を信用しない。
  * 時刻は clock として注入し、テストで固定できるようにする。
  */
-export const createTodoService = (repo: TodoRepository, clock: () => Date = () => new Date()) => ({
+export const createTodoService = (
+  repo: TodoRepository,
+  { clock = () => new Date(), timeZone = "Asia/Tokyo" }: { clock?: () => Date; timeZone?: string } = {},
+) => ({
+  today: (): Date => calendarDayIn(clock(), timeZone),
+
   async list(query: unknown = {}): Promise<Todo[]> {
     return repo.findMany(todoQuerySchema.parse(query));
   },
@@ -52,16 +57,18 @@ export const createTodoService = (repo: TodoRepository, clock: () => Date = () =
     if (!(await repo.delete(parseId(id)))) throw new NotFoundError("Todo");
   },
 
-  clearCompleted: (): Promise<number> => repo.deleteCompleted(),
+  clearCompleted: (): Promise<number> => repo.archiveCompleted(clock()),
 
   async stats(): Promise<TodoStats> {
-    const now = clock();
-    const since = addUtcDays(startOfUtcDay(now), -(STATS_DAYS - 1));
-    const { counts, completedAts } = await repo.statsSnapshot(now, since);
+    const today = calendarDayIn(clock(), timeZone);
+    // 正の UTC オフセットでも最初の日の現地 0 時を取りこぼさない余裕を持たせる
+    const since = addUtcDays(today, -STATS_DAYS);
+    const { counts, completedAts } = await repo.statsSnapshot(today, since);
+    const cumulativeTotal = counts.total + counts.archived;
     return {
       ...counts,
-      completionRate: counts.total === 0 ? 0 : counts.completed / counts.total,
-      completedPerDay: bucketByDay(completedAts, now, STATS_DAYS),
+      completionRate: cumulativeTotal === 0 ? 0 : (counts.completed + counts.archived) / cumulativeTotal,
+      completedPerDay: bucketByDay(completedAts, today, STATS_DAYS, timeZone),
     };
   },
 });

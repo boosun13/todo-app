@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { startOfUtcDay } from "./date";
 
 export const TITLE_MAX_LENGTH = 100;
 export const DESCRIPTION_MAX_LENGTH = 500;
@@ -83,9 +82,10 @@ export type Todo = {
   priority: Priority;
   dueDate: Date | null;
   completedAt: Date | null;
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
-export const isOverdue = (todo: Pick<Todo, "completed" | "dueDate">, now: Date): boolean =>
-  !todo.completed && todo.dueDate !== null && todo.dueDate < startOfUtcDay(now);
+export const isOverdue = (todo: Pick<Todo, "completed" | "dueDate">, today: Date): boolean =>
+  !todo.completed && todo.dueDate !== null && todo.dueDate < today;

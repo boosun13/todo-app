@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NotFoundError } from "@/domain/errors";
 import { formatDateTime } from "@/lib/format";
 import { todoService } from "@/server/todo";
+import { APP_TIME_ZONE } from "@/server/config";
 import { updateTodo } from "../../_actions/todo-actions";
 import { DeleteTodoButton } from "../../_components/delete-todo-button";
 import { TodoForm } from "../../_components/todo-form";
@@ -55,13 +56,13 @@ async function TodoDetail({ params }: Pick<PageProps<"/todos/[id]">, "params">) 
           <dt>状態</dt>
           <dd>{todo.completed ? "完了" : "未完了"}</dd>
           <dt>作成</dt>
-          <dd>{formatDateTime(todo.createdAt)}</dd>
+          <dd>{formatDateTime(todo.createdAt, APP_TIME_ZONE)}</dd>
           <dt>更新</dt>
-          <dd>{formatDateTime(todo.updatedAt)}</dd>
+          <dd>{formatDateTime(todo.updatedAt, APP_TIME_ZONE)}</dd>
           {todo.completedAt && (
             <>
               <dt>完了</dt>
-              <dd>{formatDateTime(todo.completedAt)}</dd>
+              <dd>{formatDateTime(todo.completedAt, APP_TIME_ZONE)}</dd>
             </>
           )}
         </dl>

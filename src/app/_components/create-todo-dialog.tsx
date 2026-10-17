@@ -13,13 +13,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { createTodo } from "../_actions/todo-actions";
+import { CREATE_TODO_ATTR } from "./focus";
 import { TodoForm } from "./todo-form";
 
 export function CreateTodoDialog() {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>
+      <DialogTrigger render={<Button {...{ [CREATE_TODO_ATTR]: "" }} />}>
         <PlusIcon data-icon="inline-start" />
         新規作成
       </DialogTrigger>

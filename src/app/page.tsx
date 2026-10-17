@@ -38,7 +38,7 @@ async function TodoSection({ searchParams }: Pick<PageProps<"/">, "searchParams"
   };
 
   const [todos, stats] = await Promise.all([todoService.list(query), todoService.stats()]);
-  const now = new Date();
+  const today = todoService.today(); // 期限切れはアプリのタイムゾーンの暦日で判定する
   const isFiltered = query.filter !== "all" || query.q !== "" || query.priority !== undefined;
 
   return (
@@ -51,7 +51,7 @@ async function TodoSection({ searchParams }: Pick<PageProps<"/">, "searchParams"
       ) : (
         <ul className="divide-y">
           {todos.map((todo) => (
-            <TodoItem key={todo.id} todo={todo} overdue={isOverdue(todo, now)} />
+            <TodoItem key={todo.id} todo={todo} overdue={isOverdue(todo, today)} />
           ))}
         </ul>
       )}
@@ -59,7 +59,8 @@ async function TodoSection({ searchParams }: Pick<PageProps<"/">, "searchParams"
         <span>
           未完了 {stats.active} 件 / 全 {stats.total} 件
         </span>
-        <ClearCompletedButton disabled={stats.completed === 0} />
+        {/* stats はアーカイブ済みを除くので、表示中の絞り込みに関係ない「一覧上の完了済み」件数になる */}
+        <ClearCompletedButton completedCount={stats.completed} />
       </div>
     </section>
   );

@@ -2,7 +2,7 @@
 
 import { CalendarIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
-import { useOptimistic, useTransition } from "react";
+import { useOptimistic, useRef, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import type { Todo } from "@/domain/todo";
 import { formatDueDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteTodo, setTodoCompleted } from "../_actions/todo-actions";
+import { focusAfterRemove } from "./focus";
 import { PriorityBadge } from "./priority-badge";
 
 type Props = {
@@ -30,15 +31,25 @@ export function TodoItem({ todo, overdue }: Props) {
       if (!result.ok) toast.error(result.error);
     });
 
-  const remove = () =>
+  const itemRef = useRef<HTMLLIElement>(null);
+
+  const remove = () => {
+    // 削除後にフォーカスを移す候補(次の行 → 前の行)の id を、DOM が変わる前に控える
+    const item = itemRef.current;
+    const candidateIds = [item?.nextElementSibling, item?.previousElementSibling].flatMap((el) =>
+      el instanceof HTMLElement && el.dataset.todoId ? [el.dataset.todoId] : [],
+    );
     startTransition(async () => {
       const result = await deleteTodo(todo.id);
-      if (result.ok) toast.success("削除しました");
-      else toast.error(result.error);
+      if (result.ok) {
+        toast.success("削除しました");
+        focusAfterRemove(todo.id, candidateIds);
+      } else toast.error(result.error);
     });
+  };
 
   return (
-    <li className={cn("flex items-start gap-3 py-3", pending && "opacity-60")}>
+    <li ref={itemRef} data-todo-id={todo.id} className={cn("flex items-start gap-3 py-3", pending && "opacity-60")}>
       <Checkbox
         checked={completed}
         onCheckedChange={toggle}

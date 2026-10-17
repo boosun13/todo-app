@@ -1,4 +1,3 @@
-import { startOfUtcDay } from "@/domain/date";
 import { PRIORITIES, type Priority, type Todo, type TodoQuery } from "@/domain/todo";
 import type { TodoRepository } from "@/domain/todo-repository";
 
@@ -29,6 +28,7 @@ export const createInMemoryTodoRepository = (): TodoRepository => {
       const matches = (t: Todo) =>
         t.title.toLowerCase().includes(needle) || t.description.toLowerCase().includes(needle);
       return [...store.values()]
+        .filter((t) => t.archivedAt === null)
         .filter((t) => filter === "all" || t.completed === (filter === "completed"))
         .filter((t) => !priority || t.priority === priority)
         .filter((t) => !needle || matches(t))
@@ -37,7 +37,7 @@ export const createInMemoryTodoRepository = (): TodoRepository => {
     },
     async findById(id) {
       const t = store.get(id);
-      return t ? copy(t) : null;
+      return t && t.archivedAt === null ? copy(t) : null;
     },
     async create({ title, description, priority, dueDate }) {
       // 作成順が createdAt に反映されるよう単調増加させる
@@ -50,15 +50,16 @@ export const createInMemoryTodoRepository = (): TodoRepository => {
         dueDate: dueDate ?? null,
         completed: false,
         completedAt: null,
+        archivedAt: null,
         createdAt: now,
         updatedAt: now,
       };
-      store.set(todo.id, todo);
+      store.set(todo.id, copy(todo));
       return copy(todo);
     },
     async update(id, patch) {
       const current = store.get(id);
-      if (!current) return null;
+      if (!current || current.archivedAt !== null) return null;
       const { completedAt, ...rest } = patch;
       const defined = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
       const transitions = patch.completed !== undefined && patch.completed !== current.completed;
@@ -68,19 +69,21 @@ export const createInMemoryTodoRepository = (): TodoRepository => {
         ...(transitions && completedAt !== undefined && { completedAt }),
         updatedAt: new Date(),
       };
-      store.set(id, next);
+      store.set(id, copy(next));
       return copy(next);
     },
     async delete(id) {
-      return store.delete(id);
+      const todo = store.get(id);
+      return todo?.archivedAt === null ? store.delete(id) : false;
     },
-    async deleteCompleted() {
-      const ids = [...store.values()].filter((t) => t.completed).map((t) => t.id);
-      ids.forEach((id) => store.delete(id));
-      return ids.length;
+    async archiveCompleted(now) {
+      const todos = [...store.values()].filter((t) => t.completed && t.archivedAt === null);
+      todos.forEach((t) => store.set(t.id, copy({ ...t, archivedAt: now, updatedAt: now })));
+      return todos.length;
     },
-    async statsSnapshot(now, since) {
-      const all = [...store.values()];
+    async statsSnapshot(today, since) {
+      const stored = [...store.values()];
+      const all = stored.filter((t) => t.archivedAt === null);
       const active = all.filter((t) => !t.completed);
       const activeByPriority = Object.fromEntries(
         PRIORITIES.map((p) => [p, active.filter((t) => t.priority === p).length]),
@@ -88,12 +91,13 @@ export const createInMemoryTodoRepository = (): TodoRepository => {
       return {
         counts: {
           total: all.length,
+          archived: stored.filter((t) => t.archivedAt !== null && t.completed).length,
           completed: all.length - active.length,
           active: active.length,
-          overdue: active.filter((t) => t.dueDate && t.dueDate < startOfUtcDay(now)).length,
+          overdue: active.filter((t) => t.dueDate && t.dueDate < today).length,
           activeByPriority,
         },
-        completedAts: all.flatMap((t) =>
+        completedAts: stored.flatMap((t) =>
           t.completedAt && t.completedAt >= since ? [new Date(t.completedAt)] : [],
         ),
       };
